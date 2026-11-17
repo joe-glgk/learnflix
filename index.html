@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LearnFlix — คลังสื่อการเรียนรู้</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav id="nav">
+  <div class="logo" onclick="go('home')">LEARN<span>FLIX</span></div>
+  <div class="links" id="links">
+    <button data-v="home" class="on">หน้าแรก</button>
+    <button data-v="courses">รายวิชาทั้งหมด</button>
+    <button data-v="quiz">แบบทดสอบ</button>
+    <button data-v="mylist">รายการของฉัน</button>
+    <button data-v="progress">ความก้าวหน้า</button>
+  </div>
+  <div class="nav-right">
+    <div class="search">🔍<input id="q" placeholder="ค้นหาชื่อวิชา / รหัสวิชา"></div>
+    <div class="xp" id="xp">⭐ 0 XP</div>
+    <button class="lvl" id="lvl" onclick="showProfiles()" title="เปลี่ยนระดับชั้น"></button>
+  </div>
+</nav>
+
+<div id="view"></div>
+
+<div class="mob" id="mob">
+  <button data-v="home" class="on"><span>🏠</span>หน้าแรก</button>
+  <button data-v="courses"><span>📚</span>รายวิชา</button>
+  <button data-v="quiz"><span>📝</span>แบบทดสอบ</button>
+  <button data-v="mylist"><span>❤️</span>ของฉัน</button>
+  <button data-v="progress"><span>📊</span>สถิติ</button>
+</div>
+
+<div class="profiles" id="profiles"></div>
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="player" id="player"></div>
+<div class="toast" id="toast"></div>
+
+<script src="js/courses.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
