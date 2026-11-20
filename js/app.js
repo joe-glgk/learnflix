@@ -4,14 +4,17 @@ let S = { level: null, done: {}, quiz: {}, list: [], xp: 0, recent: [], fin: {},
 try { const r = localStorage.getItem(KEY); if (r) S = Object.assign(S, JSON.parse(r)); } catch (e) {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 
-COURSES.forEach(c => { c.id = c.level + "-" + c.code; c.quiz = c.quiz || []; c.chapters = c.chapters || []; });
+COURSES.forEach(c => { c.id = c.level + "-" + c.code; c.quiz = c.quiz || []; c.chapters = c.chapters || []; c.quizzes = (c.quizzes || []).filter(x => x && x.quiz && x.quiz.length); });
 const C = id => COURSES.find(c => c.id === id);
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 const TYPES = ["บังคับ", "เลือกบังคับ", "เลือกเสรี"];
 const strand = c => STRANDS[c.code.slice(0, 2)] || { name: "รายวิชาอื่น ๆ", g: ["#444", "#111"] };
 const mine = () => COURSES.filter(c => c.level === S.level);
-const hasQuiz = c => c.quiz.length || c.quizUrl;
+const hasQuiz = c => c.quiz.length || c.quizUrl || c.quizzes.length;
+/* ชุดแบบทดสอบ: แบบรายบท (quizzes) หรือชุดเดียว (quiz) */
+const qsets = c => c.quizzes.length ? c.quizzes : (c.quiz.length ? [{ t: "แบบทดสอบ", quiz: c.quiz }] : []);
+const qkey = (c, i) => c.quizzes.length ? c.id + "#" + i : c.id;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /* ============ LINK → EMBED ============ */
@@ -35,10 +38,14 @@ function items(c) {
     if (c.canva) a.push({ k: "media", t: "สื่อการสอน", s: "สไลด์/สื่อนำเสนอจาก Canva", ic: "🎬", srcs: srcs({ canva: c.canva }) });
     if (c.doc) a.push({ k: "doc", t: "เอกสารประกอบการเรียน", s: "หนังสือเรียน/เอกสาร PDF", ic: "📄", srcs: srcs({ doc: c.doc }) });
   }
-  if (hasQuiz(c)) a.push({ k: "quiz", t: "แบบทดสอบ", s: c.quiz.length ? c.quiz.length + " ข้อ · เกณฑ์ผ่าน 70%" : "แบบทดสอบออนไลน์ (Google Form)", ic: "📝" });
+  if (c.quizzes.length) c.quizzes.forEach((x, i) => a.push({ k: "q" + i, qi: i, t: "แบบทดสอบ " + x.t, s: x.quiz.length + " ข้อ · เกณฑ์ผ่าน 70%" + (S.quiz[qkey(c, i)] != null ? " · คะแนนสูงสุด " + S.quiz[qkey(c, i)] + "%" : ""), ic: "📝" }));
+  else if (hasQuiz(c)) a.push({ k: "quiz", qi: 0, t: "แบบทดสอบ", s: c.quiz.length ? c.quiz.length + " ข้อ · เกณฑ์ผ่าน 70%" : "แบบทดสอบออนไลน์ (Google Form)", ic: "📝" });
   return a;
 }
-const isDone = (c, k) => k === "quiz" ? (c.quiz.length ? (S.quiz[c.id] ?? -1) >= 70 : !!S.done[c.id + "_quiz"]) : !!S.done[c.id + "_" + k];
+const isQ = k => k === "quiz" || /^q\d+$/.test(k);
+const isDone = (c, k) => /^q\d+$/.test(k) ? (S.quiz[qkey(c, +k.slice(1))] ?? -1) >= 70 : k === "quiz" ? (c.quiz.length ? (S.quiz[c.id] ?? -1) >= 70 : !!S.done[c.id + "_quiz"]) : !!S.done[c.id + "_" + k];
+const qScores = c => qsets(c).map((_, i) => S.quiz[qkey(c, i)]).filter(x => x != null);
+const qAvg = c => { const a = qScores(c); return a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null; };
 function pct(c) { const it = items(c); if (!it.length) return 0; return Math.round(it.filter(i => isDone(c, i.k)).length / it.length * 100); }
 function checkFinish(c) { if (pct(c) === 100 && !S.fin[c.id]) { S.fin[c.id] = today(); S.xp += 50; save(); updXP(); setTimeout(() => toast("🏅 เรียนครบวิชาแล้ว! +50 XP รับใบประกาศได้ในหน้ารายวิชา"), 900); return true; } return false; }
 
@@ -70,7 +77,7 @@ function poster(c, extra = "") {
   const g = strand(c).g;
   return `<div class="poster" style="background:linear-gradient(135deg,${g[0]},${g[1]})">${deco(c)}<div class="code">${esc(c.code)}</div><div class="sub">${esc(strand(c).name.replace("สาระ", ""))}</div><div class="tt">${esc(c.name)}</div>${extra}</div>`;
 }
-function chips(c) { return `<div class="chips">${c.chapters.length ? `<span class="chip">📑 ${c.chapters.length} บท</span>` : ''}${c.canva ? '<span class="chip">🎬 สื่อ</span>' : ''}${c.doc ? '<span class="chip">📄 เอกสาร</span>' : ''}${hasQuiz(c) ? '<span class="chip">📝 แบบทดสอบ</span>' : ''}</div>`; }
+function chips(c) { return `<div class="chips">${c.chapters.length ? `<span class="chip">📑 ${c.chapters.length} บท</span>` : ''}${c.canva ? '<span class="chip">🎬 สื่อ</span>' : ''}${c.doc ? '<span class="chip">📄 เอกสาร</span>' : ''}${hasQuiz(c) ? `<span class="chip">📝 ${c.quizzes.length ? c.quizzes.length + ' ชุด' : 'แบบทดสอบ'}</span>` : ''}</div>`; }
 function card(c) {
   const p = pct(c), inList = S.list.includes(c.id);
   return `<div class="card" onclick="openCourse('${c.id}')">${poster(c)}${S.fin[c.id] ? '<div class="medal" title="เรียนครบแล้ว">🏅</div>' : ''}
@@ -141,14 +148,14 @@ function render(v = cur) {
     h = `<div class="grid"><div class="ttl">รายการของฉัน</div>${l.map(card).join("") || '<p style="color:var(--muted)">ยังไม่มีรายวิชาในรายการ กดปุ่ม + บนการ์ดเพื่อเพิ่ม</p>'}</div>`;
   } else if (v === "quiz") {
     const l = M.filter(hasQuiz);
-    h = `<div class="grid"><div class="ttl">แบบทดสอบ · ${esc(L.name)}</div>${l.map(c => { const s = S.quiz[c.id], d = isDone(c, "quiz"); return `<div class="card" onclick="startQuiz('${c.id}')">${poster(c, `<div style="position:relative;font-size:13px;margin-top:4px">${c.quiz.length ? c.quiz.length + ' ข้อ · ' + (s != null ? 'คะแนนสูงสุด ' + s + '%' : 'ยังไม่เคยทำ') : 'Google Form · ' + (d ? 'ส่งแล้ว' : 'ยังไม่ได้ทำ')}</div>`)}${s != null || d ? `<div class="badge-n" style="left:auto;right:10px;background:${d ? 'var(--ok)' : 'var(--warn)'}">${d ? (c.quiz.length ? 'ผ่าน' : 'ส่งแล้ว') : 'ลองใหม่'}</div>` : ''}</div>` }).join("") || '<p style="color:var(--muted)">ยังไม่มีแบบทดสอบในระดับชั้นนี้</p>'}</div>`;
+    h = `<div class="grid"><div class="ttl">แบบทดสอบ · ${esc(L.name)}</div>${l.map(c => { const s = c.quizzes.length ? qAvg(c) : S.quiz[c.id], d = c.quizzes.length ? c.quizzes.every((_, i) => isDone(c, 'q' + i)) : isDone(c, "quiz"); return `<div class="card" onclick="startQuiz('${c.id}')">${poster(c, `<div style="position:relative;font-size:13px;margin-top:4px">${c.quizzes.length ? c.quizzes.length + ' ชุด · ผ่านแล้ว ' + c.quizzes.filter((_, i) => isDone(c, 'q' + i)).length + ' ชุด' : c.quiz.length ? c.quiz.length + ' ข้อ · ' + (s != null ? 'คะแนนสูงสุด ' + s + '%' : 'ยังไม่เคยทำ') : 'Google Form · ' + (d ? 'ส่งแล้ว' : 'ยังไม่ได้ทำ')}</div>`)}${s != null || d ? `<div class="badge-n" style="left:auto;right:10px;background:${d ? 'var(--ok)' : 'var(--warn)'}">${d ? (c.quiz.length ? 'ผ่าน' : 'ส่งแล้ว') : 'ลองใหม่'}</div>` : ''}</div>` }).join("") || '<p style="color:var(--muted)">ยังไม่มีแบบทดสอบในระดับชั้นนี้</p>'}</div>`;
   } else if (v === "progress") {
     const all = M.flatMap(c => items(c).map(i => isDone(c, i.k))), doneN = all.filter(Boolean).length;
-    const qs = M.map(c => S.quiz[c.id]).filter(x => x != null), avg = qs.length ? Math.round(qs.reduce((a, b) => a + b, 0) / qs.length) : 0;
+    const qs = M.map(qAvg).filter(x => x != null), avg = qs.length ? Math.round(qs.reduce((a, b) => a + b, 0) / qs.length) : 0;
     const fin = M.filter(c => S.fin[c.id]);
     h = `<div class="stats"><div class="stat"><b>⭐ ${S.xp}</b><span>XP สะสม</span></div><div class="stat"><b>${doneN}/${all.length}</b><span>บทเรียน/เอกสารที่ศึกษาแล้ว</span></div><div class="stat"><b>🏅 ${fin.length}/${M.length}</b><span>รายวิชาที่เรียนครบ</span></div><div class="stat"><b>${qs.length ? avg + '%' : '—'}</b><span>คะแนนแบบทดสอบเฉลี่ย</span></div></div>
     ${fin.length ? `<div style="padding:10px 4vw 0"><h3 style="margin-bottom:10px">🏅 เหรียญของฉัน</h3><div class="medals">${fin.map(c => `<button class="mdl" onclick="cert('${c.id}')"><span>🏅</span><b>${esc(c.name)}</b><small>${thaiDate(S.fin[c.id])}</small></button>`).join("")}</div></div>` : ''}
-    <div style="padding:20px 4vw 60px"><h3 style="margin-bottom:6px">${esc(L.name)}</h3>${M.map(c => { const p = pct(c); return `<div class="ep" onclick="openCourse('${c.id}')"><div class="th" style="background:linear-gradient(135deg,${strand(c).g[0]},${strand(c).g[1]})">${S.fin[c.id] ? '🏅' : c.ic || "📘"}</div><div class="info"><h4>${esc(c.name)} <span>${esc(c.code)} · ${p}%</span></h4><div class="bar" style="margin:8px 0"><i style="width:${p}%"></i></div><p>วิชา${esc(c.type)}${S.quiz[c.id] != null ? ' · แบบทดสอบ ' + S.quiz[c.id] + '%' : ''}</p></div></div>` }).join("")}
+    <div style="padding:20px 4vw 60px"><h3 style="margin-bottom:6px">${esc(L.name)}</h3>${M.map(c => { const p = pct(c); return `<div class="ep" onclick="openCourse('${c.id}')"><div class="th" style="background:linear-gradient(135deg,${strand(c).g[0]},${strand(c).g[1]})">${S.fin[c.id] ? '🏅' : c.ic || "📘"}</div><div class="info"><h4>${esc(c.name)} <span>${esc(c.code)} · ${p}%</span></h4><div class="bar" style="margin:8px 0"><i style="width:${p}%"></i></div><p>วิชา${esc(c.type)}${qAvg(c) != null ? ' · แบบทดสอบเฉลี่ย ' + qAvg(c) + '%' : ''}</p></div></div>` }).join("")}
     <button class="btn btn-g" style="margin-top:20px" onclick="resetAll()">↺ ล้างความก้าวหน้าทั้งหมด</button></div>`;
   }
   $("#view").innerHTML = h + `<footer>LearnFlix · คลังสื่อการเรียนรู้ด้วยตนเอง · ${esc(L.name)}</footer>`;
@@ -158,24 +165,25 @@ let resetArm = 0;
 function resetAll() { if (Date.now() - resetArm > 3000) { resetArm = Date.now(); toast("กดอีกครั้งเพื่อยืนยันการล้างข้อมูล"); return; } S = Object.assign(S, { done: {}, quiz: {}, list: [], xp: 0, recent: [], fin: {} }); save(); updXP(); render(); toast("ล้างข้อมูลแล้ว"); }
 
 /* ============ COURSE MODAL ============ */
-function openCourse(id) {
+function openCourse(id, toQuiz) {
   const c = C(id), p = pct(c), inList = S.list.includes(id), it = items(c), fin = S.fin[id];
   $("#modal").innerHTML = `<div class="m-hero">${poster(c, `<div class="btns">${it.length ? `<button class="btn btn-w" onclick="resume('${id}')">▶ ${p > 0 && p < 100 ? 'เรียนต่อ' : p === 100 ? 'ทบทวน' : 'เริ่มเรียน'}</button>` : ''}${fin ? `<button class="btn btn-gold" onclick="cert('${id}')">🏅 ใบประกาศ</button>` : ''}<button class="circ" style="width:44px;height:44px;font-size:18px" onclick="toggleList('${id}');openCourse('${id}')">${inList ? '✓' : '+'}</button></div>`)}<button class="x" onclick="closeOv()">✕</button></div>
   <div class="m-body"><div class="m-grid"><div><div class="meta"><span class="pill">${esc(c.code)}</span><span>วิชา${esc(c.type)}</span>${c.chapters.length ? `<span>📑 ${c.chapters.length} บท</span>` : ''}${p ? `<span class="match">ศึกษาแล้ว ${p}%</span>` : ''}</div>
   <p>รายวิชา${esc(c.name)} (${esc(c.code)}) ${esc(LEVELS[c.level].name)} เลือกศึกษาเนื้อหาได้ตามลำดับ เมื่อศึกษาจบแล้วกด “ศึกษาจบแล้ว” เพื่อบันทึกความก้าวหน้า เรียนครบทุกรายการจะได้รับใบประกาศ 🏅</p>
   ${c.chapters.length && (c.canva || c.doc) ? `<div class="btns" style="margin-top:12px">${c.canva ? `<button class="btn btn-g sm" onclick="viewWhole('${id}','canva')">🎬 สื่อทั้งเล่ม</button>` : ''}${c.doc ? `<button class="btn btn-g sm" onclick="viewWhole('${id}','doc')">📄 หนังสือเรียนฉบับเต็ม</button>` : ''}</div>` : ''}</div>
-  <div class="m-side"><div><b>ระดับชั้น:</b> ${esc(LEVELS[c.level].name)}</div><div><b>ประเภท:</b> วิชา${esc(c.type)}</div><div><b>สาระ:</b> ${esc(strand(c).name)}</div><div><b>แบบทดสอบ:</b> ${S.quiz[id] != null ? S.quiz[id] + '%' : isDone(c, "quiz") ? 'ส่งแล้ว' : hasQuiz(c) ? 'ยังไม่ได้ทำ' : 'ยังไม่มี'}</div>${fin ? `<div><b>เรียนครบเมื่อ:</b> ${thaiDate(fin)}</div>` : ''}</div></div>
+  <div class="m-side"><div><b>ระดับชั้น:</b> ${esc(LEVELS[c.level].name)}</div><div><b>ประเภท:</b> วิชา${esc(c.type)}</div><div><b>สาระ:</b> ${esc(strand(c).name)}</div><div><b>แบบทดสอบ:</b> ${c.quizzes.length ? `${c.quizzes.length} ชุด (ผ่าน ${c.quizzes.filter((_, i) => isDone(c, 'q' + i)).length})` : S.quiz[id] != null ? S.quiz[id] + '%' : isDone(c, "quiz") ? 'ส่งแล้ว' : hasQuiz(c) ? 'ยังไม่ได้ทำ' : 'ยังไม่มี'}</div>${fin ? `<div><b>เรียนครบเมื่อ:</b> ${thaiDate(fin)}</div>` : ''}</div></div>
   <div class="tabs"><button class="on">${c.chapters.length ? 'บทเรียน' : 'เนื้อหาในรายวิชา'}</button></div>
-  ${it.map((x, i) => { const d = isDone(c, x.k); return `<div class="ep" onclick="${x.k === 'quiz' ? `startQuiz('${id}')` : `view('${id}','${x.k}')`}"><div class="n">${i + 1}</div><div class="th" style="background:linear-gradient(135deg,${strand(c).g[0]},${strand(c).g[1]})">${d ? '✅' : x.ic}</div><div class="info"><h4>${esc(x.t)}<span>${d ? '<span class="done">ศึกษาแล้ว</span>' : ''}</span></h4><p>${esc(x.s)}</p></div></div>` }).join("")}
+  ${it.map((x, i) => { const d = isDone(c, x.k); return `<div class="ep${isQ(x.k) ? ' qz' : ''}" onclick="${isQ(x.k) ? `startQuiz('${id}',${x.qi})` : `view('${id}','${x.k}')`}"><div class="n">${i + 1}</div><div class="th" style="background:linear-gradient(135deg,${strand(c).g[0]},${strand(c).g[1]})">${d ? '✅' : x.ic}</div><div class="info"><h4>${esc(x.t)}<span>${d ? '<span class="done">ศึกษาแล้ว</span>' : ''}</span></h4><p>${esc(x.s)}</p></div></div>` }).join("")}
   ${!hasQuiz(c) ? `<div class="ep dis"><div class="n">${it.length + 1}</div><div class="th" style="background:#2b2b36">📝</div><div class="info"><h4>แบบทดสอบ</h4><p>ผู้สอนกำลังจัดเตรียม เร็ว ๆ นี้</p></div></div>` : ''}
   ${fin ? `<div class="quizbox" style="margin-top:16px"><div class="big">🏅</div><div style="flex:1;min-width:200px"><h4>เรียนครบรายวิชาแล้ว!</h4><p>บันทึกใบประกาศความสำเร็จเป็นรูปภาพเก็บไว้หรือแชร์ได้</p></div><button class="btn btn-gold" onclick="cert('${id}')">ดูใบประกาศ</button></div>` : ''}
   </div>`;
   $("#ov").classList.add("show"); document.body.style.overflow = "hidden";
+  if (toQuiz) setTimeout(() => { const e = document.querySelector('#modal .ep.qz'); if (e) e.scrollIntoView({ behavior: "smooth", block: "center" }); }, 80);
 }
 function closeOv() { $("#ov").classList.remove("show"); document.body.style.overflow = ""; render(); }
 $("#ov").addEventListener("click", e => { if (e.target.id === "ov") closeOv(); });
 function toggleList(id) { const i = S.list.indexOf(id); if (i >= 0) { S.list.splice(i, 1); toast("นำออกจากรายการแล้ว"); } else { S.list.push(id); toast("เพิ่มในรายการของฉันแล้ว ❤️"); } save(); if (!$("#ov").classList.contains("show")) render(); }
-function resume(id) { const c = C(id), it = items(c); if (!it.length) return openCourse(id); const n = it.find(x => !isDone(c, x.k)) || it[0]; n.k === "quiz" ? startQuiz(id) : view(id, n.k); }
+function resume(id) { const c = C(id), it = items(c); if (!it.length) return openCourse(id); const n = it.find(x => !isDone(c, x.k)) || it[0]; isQ(n.k) ? startQuiz(id, n.qi) : view(id, n.k); }
 function openPlayer(html) { $("#player").innerHTML = html; $("#player").classList.add("show"); document.body.style.overflow = "hidden"; }
 
 /* ============ VIEWER (Canva / Drive / YouTube / Google Form) ============ */
@@ -193,8 +201,8 @@ function view(id, k, si = 0) {
    <a class="btn btn-g btn-l top-open" href="${esc(s.url)}" target="_blank" rel="noopener">เปิดในแท็บใหม่ ↗</a></div>
   ${x.srcs.length > 1 ? `<div class="vtabs">${x.srcs.map((z, j) => `<button class="${j === si ? 'on' : ''}" onclick="view('${id}','${k}',${j})">${z.ic} ${z.lbl}</button>`).join("")}</div>` : ''}
   ${frame(s)}
-  <div class="p-foot">${prev && prev.k !== "quiz" ? `<button class="btn btn-g" onclick="view('${id}','${prev.k}')">‹</button>` : ''}<button class="btn ${d ? 'btn-g' : 'btn-r'}" style="margin-right:auto" onclick="markDone()">${d ? '✓ ศึกษาจบแล้ว' : '✓ ศึกษาจบแล้ว (+20 XP)'}</button>
-   ${next ? `<button class="btn btn-w" onclick="${next.k === 'quiz' ? `startQuiz('${id}')` : `view('${id}','${next.k}')`}">ถัดไป: ${esc(next.t.length > 22 ? next.t.slice(0, 22) + '…' : next.t)} ›</button>` : ''}</div>`);
+  <div class="p-foot">${prev && !isQ(prev.k) ? `<button class="btn btn-g" onclick="view('${id}','${prev.k}')">‹</button>` : ''}<button class="btn ${d ? 'btn-g' : 'btn-r'}" style="margin-right:auto" onclick="markDone()">${d ? '✓ ศึกษาจบแล้ว' : '✓ ศึกษาจบแล้ว (+20 XP)'}</button>
+   ${next ? `<button class="btn btn-w" onclick="${isQ(next.k) ? `startQuiz('${id}',${next.qi})` : `view('${id}','${next.k}')`}">ถัดไป: ${esc(next.t.length > 22 ? next.t.slice(0, 22) + '…' : next.t)} ›</button>` : ''}</div>`);
 }
 function viewWhole(id, k) {
   const c = C(id), s = srcs({ [k]: c[k] })[0]; P = { id }; Q = {};
@@ -218,32 +226,41 @@ function formQuiz(id) {
   ${frame(s).replace('class="viewer"', 'class="viewer form"')}
   <div class="p-foot"><span class="fhint">ทำแบบทดสอบและกด “ส่ง” ในฟอร์มให้เรียบร้อย แล้วกดปุ่มนี้</span><button class="btn ${d ? 'btn-g' : 'btn-r'}" onclick="markDone()">${d ? '✓ ส่งแบบทดสอบแล้ว' : '✓ ส่งแบบทดสอบแล้ว (+20 XP)'}</button></div>`);
 }
-function startQuiz(id) {
-  const c = C(id);
-  if (!c.quiz.length && c.quizUrl) return formQuiz(id);
-  if (!c.quiz.length) return toast("วิชานี้ยังไม่มีแบบทดสอบ");
-  Q = { id, n: 0, score: 0, ans: null }; P = {}; S.recent = [id, ...S.recent.filter(r => r !== id)].slice(0, 10); save(); drawQ();
+function startQuiz(id, si) {
+  const c = C(id), sets = qsets(c);
+  if (!sets.length && c.quizUrl) return formQuiz(id);
+  if (!sets.length) return toast("วิชานี้ยังไม่มีแบบทดสอบ");
+  if (si == null) { if (sets.length > 1) { closePlayer(); return openCourse(id, true); } si = 0; }
+  Q = { id, si, n: 0, score: 0, ans: null, qs: sets[si].quiz.map(mix) }; P = {}; S.recent = [id, ...S.recent.filter(r => r !== id)].slice(0, 10); save(); drawQ();
+}
+const QS = () => Q.qs;
+/* สลับตำแหน่งตัวเลือกทุกครั้งที่ทำ (ยกเว้นข้อที่มีตัวเลือกแบบ "ถูกทุกข้อ / ข้อ ก และ ข") */
+function mix(q) {
+  if (q.o.some(o => /ข้อ|ทุกข้อ|ทั้งหมด/.test(o))) return q;
+  const idx = q.o.map((_, i) => i); for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+  return { q: q.q, o: idx.map(i => q.o[i]), a: idx.indexOf(q.a), e: q.e };
 }
 function drawQ() {
-  const c = C(Q.id), it = c.quiz[Q.n];
-  openPlayer(`<div class="p-top"><button class="circ" onclick="closePlayer()">✕</button><h3>แบบทดสอบ: ${esc(c.name)}<small>${esc(c.code)} · ข้อ ${Q.n + 1} จาก ${c.quiz.length}</small></h3></div>
-  <div class="p-main"><div class="q-card"><div class="bar" style="margin-bottom:20px"><i style="width:${(Q.n / c.quiz.length) * 100}%"></i></div>
+  const c = C(Q.id), set = qsets(c)[Q.si], QZ = Q.qs, it = QZ[Q.n];
+  openPlayer(`<div class="p-top"><button class="circ" onclick="closePlayer()">✕</button><h3>แบบทดสอบ: ${esc(c.quizzes.length ? set.t : c.name)}<small>${esc(c.code)} ${esc(c.name)} · ข้อ ${Q.n + 1} จาก ${QZ.length}</small></h3></div>
+  <div class="p-main"><div class="q-card"><div class="bar" style="margin-bottom:20px"><i style="width:${(Q.n / QZ.length) * 100}%"></i></div>
   <div class="q-head"><span>คำถามที่ ${Q.n + 1}</span><span>ถูก ${Q.score} ข้อ</span></div><h2>${esc(it.q)}</h2>
   ${it.o.map((o, k) => { let cls = ""; if (Q.ans != null) { if (k === it.a) cls = "right"; else if (k === Q.ans) cls = "wrong"; } return `<button class="opt ${cls}" ${Q.ans != null ? 'disabled' : ''} onclick="pick(${k})"><span class="k">${"กขคงจ"[k]}</span>${esc(o)}</button>` }).join("")}
-  ${Q.ans != null ? `<div class="exp"><b>${Q.ans === it.a ? '✅ ถูกต้อง!' : '❌ ยังไม่ถูก'}</b> ${esc(it.e || "")}</div><button class="btn btn-r" onclick="nextQ()">${Q.n < c.quiz.length - 1 ? 'ข้อถัดไป ›' : 'ดูผลคะแนน'}</button>` : ''}
+  ${Q.ans != null ? `<div class="exp"><b>${Q.ans === it.a ? '✅ ถูกต้อง!' : '❌ ยังไม่ถูก'}</b> ${esc(it.e || "")}</div><button class="btn btn-r" onclick="nextQ()">${Q.n < QZ.length - 1 ? 'ข้อถัดไป ›' : 'ดูผลคะแนน'}</button>` : ''}
   </div></div>`);
 }
-function pick(k) { if (Q.ans != null) return; Q.ans = k; if (k === C(Q.id).quiz[Q.n].a) Q.score++; drawQ(); }
-function nextQ() { const c = C(Q.id); Q.ans = null; if (Q.n < c.quiz.length - 1) { Q.n++; drawQ(); } else showResult(); }
+function pick(k) { if (Q.ans != null) return; Q.ans = k; if (k === QS()[Q.n].a) Q.score++; drawQ(); }
+function nextQ() { Q.ans = null; if (Q.n < QS().length - 1) { Q.n++; drawQ(); } else showResult(); }
 function showResult() {
-  const c = C(Q.id), p = Math.round(Q.score / c.quiz.length * 100), pass = p >= 70, gain = Q.score * 10;
-  const best = S.quiz[Q.id]; S.quiz[Q.id] = Math.max(best ?? 0, p); S.xp += gain; save(); updXP();
+  const c = C(Q.id), sets = qsets(c), set = sets[Q.si], n = set.quiz.length, key = qkey(c, Q.si), p = Math.round(Q.score / n * 100), pass = p >= 70, gain = Q.score * 10;
+  const best = S.quiz[key]; S.quiz[key] = Math.max(best ?? 0, p); S.xp += gain; save(); updXP();
+  const nxt = Q.si + 1 < sets.length ? Q.si + 1 : null;
   const justFin = checkFinish(c);
   const r = 70, cir = 2 * Math.PI * r;
-  openPlayer(`<div class="p-top"><button class="circ" onclick="closePlayer()">✕</button><h3>ผลการทดสอบ<small>${esc(c.code)} ${esc(c.name)}</small></h3></div>
+  openPlayer(`<div class="p-top"><button class="circ" onclick="closePlayer()">✕</button><h3>ผลการทดสอบ${c.quizzes.length ? ': ' + esc(set.t) : ''}<small>${esc(c.code)} ${esc(c.name)}</small></h3></div>
   <div class="p-main"><div class="result"><div class="ring"><svg width="170" height="170"><circle cx="85" cy="85" r="${r}" stroke="#2b2b36" stroke-width="12" fill="none"/><circle cx="85" cy="85" r="${r}" stroke="${pass ? '#22c55e' : '#f59e0b'}" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${cir}" stroke-dashoffset="${cir}" id="rg" style="transition:stroke-dashoffset 1.2s ease"/></svg><b>${p}%</b></div>
-  <h2>${pass ? '🎉 ยอดเยี่ยม! ผ่านแล้ว' : '💪 เกือบแล้ว ลองอีกครั้ง'}</h2><p>ตอบถูก ${Q.score} จาก ${c.quiz.length} ข้อ · ได้รับ +${gain} XP${best != null ? ` · คะแนนสูงสุดเดิม ${best}%` : ''}</p>
-  <div class="btns" style="justify-content:center">${S.fin[c.id] ? `<button class="btn btn-gold" onclick="cert('${c.id}')">🏅 ${justFin ? 'รับใบประกาศ' : 'ใบประกาศ'}</button>` : ''}<button class="btn btn-r" onclick="startQuiz('${c.id}')">↺ ทำใหม่</button><button class="btn btn-g" onclick="closePlayer();openCourse('${c.id}')">กลับไปที่รายวิชา</button></div></div></div>`);
+  <h2>${pass ? '🎉 ยอดเยี่ยม! ผ่านแล้ว' : '💪 เกือบแล้ว ลองอีกครั้ง'}</h2><p>ตอบถูก ${Q.score} จาก ${n} ข้อ · ได้รับ +${gain} XP${best != null ? ` · คะแนนสูงสุดเดิม ${best}%` : ''}</p>
+  <div class="btns" style="justify-content:center">${S.fin[c.id] ? `<button class="btn btn-gold" onclick="cert('${c.id}')">🏅 ${justFin ? 'รับใบประกาศ' : 'ใบประกาศ'}</button>` : ''}${nxt != null && pass ? `<button class="btn btn-w" onclick="startQuiz('${c.id}',${nxt})">ชุดถัดไป ›</button>` : ''}<button class="btn btn-r" onclick="startQuiz('${c.id}',${Q.si})">↺ ทำใหม่</button><button class="btn btn-g" onclick="closePlayer();openCourse('${c.id}')">กลับไปที่รายวิชา</button></div></div></div>`);
   requestAnimationFrame(() => setTimeout(() => { const g = document.getElementById("rg"); if (g) g.style.strokeDashoffset = cir * (1 - p / 100); }, 50));
 }
 
