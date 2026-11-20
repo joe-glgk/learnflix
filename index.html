@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LearnFlix — คลังสื่อการเรียนรู้</title>
+<meta name="theme-color" content="#0b0b0f">
+<meta name="description" content="คลังสื่อการเรียนรู้ด้วยตนเอง ระดับมัธยมศึกษาตอนต้นและตอนปลาย">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LearnFlix">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
@@ -20,9 +28,10 @@
     <button data-v="progress">ความก้าวหน้า</button>
   </div>
   <div class="nav-right">
-    <div class="search">🔍<input id="q" placeholder="ค้นหาชื่อวิชา / รหัสวิชา"></div>
+    <div class="search"><label for="q" style="cursor:pointer">🔍</label><input id="q" placeholder="ค้นหาชื่อวิชา / รหัสวิชา"></div>
     <div class="xp" id="xp">⭐ 0 XP</div>
     <button class="lvl" id="lvl" onclick="showProfiles()" title="เปลี่ยนระดับชั้น"></button>
+    <button class="gear" onclick="openSettings()" title="ตั้งค่า / ตัวหนังสือใหญ่ / ติดตั้งแอป">⚙️</button>
   </div>
 </nav>
 
@@ -37,6 +46,7 @@
 </div>
 
 <div class="profiles" id="profiles"></div>
+<div class="sheet" id="sheet"></div>
 <div class="ov" id="ov"><div class="modal" id="modal"></div></div>
 <div class="player" id="player"></div>
 <div class="toast" id="toast"></div>
